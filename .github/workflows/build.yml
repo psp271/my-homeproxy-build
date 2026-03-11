@@ -1,34 +1,69 @@
-name: Build HomeProxy
+name: Build HomeProxy for OpenWrt 24.10.5 (x86_64)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
-    # 降低到 ubuntu-22.04 以获得更好的兼容性，避免 distutils 缺失问题
-    runs-on: ubuntu-22.04 
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Initialization environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev python3-distutils rsync unzip zlib1g-dev
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+            gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev swig \
+            libpython3-dev python3-setuptools golang-go
+          sudo timedatectl set-timezone "Asia/Shanghai"
 
-      - name: Build with SDK
-        uses: openwrt/gh-action-sdk@v7
-        env:
-          ARCH: x86_64 # 请确保这是你的目标架构
-          FEEDNAME: custom
-          PACKAGES: luci-app-homeproxy
-          CUSTOM_FEEDS: |
-            src-git homeproxy https://github.com/immortalwrt/homeproxy.git
-            src-git packages https://github.com/immortalwrt/packages.git
-            src-git luci https://github.com/immortalwrt/luci.git
+      - name: Setup SDK (OpenWrt 24.10.5)
+        run: |
+          # 下载 24.10.5 官方 x86_64 SDK
+          wget https://downloads.openwrt.org/releases/24.10.5/targets/x86/64/openwrt-sdk-24.10.5-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.xz
+          tar -xJf *.tar.xz
+          mv openwrt-sdk-* sdk
+
+      - name: Update & Install Feeds
+        run: |
+          cd sdk
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Add HomeProxy Source
+        run: |
+          cd sdk
+          # 克隆 HomeProxy 源码到 package 目录
+          git clone https://github.com/immortalwrt/homeproxy.git package/homeproxy
+          
+          # 24.10 编译 homeproxy 必须确保依赖库存在
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          
+          # 确保 golang 版本满足编译 sing-box 的需求
+          ./scripts/feeds install -p packages golang
+
+      - name: Compile HomeProxy
+        run: |
+          cd sdk
+          # 刷新配置并选中 homeproxy (m 代表编译为独立 ipk)
+          make defconfig
+          sed -i 's/CONFIG_PACKAGE_homeproxy=y/CONFIG_PACKAGE_homeproxy=m/' .config
+          
+          # 下载源码并开始编译
+          # 使用 -j$(nproc) 加速，如果报错请改为 V=s 方便查看日志
+          make package/homeproxy/compile -j$(nproc) V=s
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: homeproxy-packages
-          path: bin/packages/*/custom/*.ipk
+          name: HomeProxy-24.10.5-x86_64
+          path: |
+            sdk/bin/packages/x86_64/base/homeproxy*.ipk
+            sdk/bin/packages/x86_64/packages/sing-box*.ipk
