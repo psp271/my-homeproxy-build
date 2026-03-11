@@ -1,27 +1,34 @@
-name: Build HomeProxy IPK
+name: Build HomeProxy
 
 on:
-  workflow_dispatch: # 手动触发编译
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # 使用最新的 Ubuntu 环境
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build IPK
+      - name: Initialization environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev python3-distutils rsync unzip zlib1g-dev
+
+      - name: Build with SDK
         uses: openwrt/gh-action-sdk@v7
         env:
-          ARCH: x86_64 # 改为你的路由器架构，如 aarch64_generic
+          # 注意：确保这里的 ARCH 与你的路由器完全一致
+          # x86 选 x86_64, 斐讯N1选 aarch64_generic, 红米AX6选 ipq807x
+          ARCH: x86_64 
           FEEDNAME: custom
           PACKAGES: luci-app-homeproxy
-          # 指向 HomeProxy 源码路径
           CUSTOM_FEEDS: |
             src-git homeproxy https://github.com/immortalwrt/homeproxy.git
+            src-git packages https://github.com/immortalwrt/packages.git
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: homeproxy-ipks
+          name: homeproxy-packages
           path: bin/packages/*/custom/*.ipk
