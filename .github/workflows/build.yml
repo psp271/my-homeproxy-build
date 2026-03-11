@@ -5,7 +5,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04 # 使用最新的 Ubuntu 环境
+    # 降低到 ubuntu-22.04 以获得更好的兼容性，避免 distutils 缺失问题
+    runs-on: ubuntu-22.04 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,14 +19,13 @@ jobs:
       - name: Build with SDK
         uses: openwrt/gh-action-sdk@v7
         env:
-          # 注意：确保这里的 ARCH 与你的路由器完全一致
-          # x86 选 x86_64, 斐讯N1选 aarch64_generic, 红米AX6选 ipq807x
-          ARCH: x86_64 
+          ARCH: x86_64 # 请确保这是你的目标架构
           FEEDNAME: custom
           PACKAGES: luci-app-homeproxy
           CUSTOM_FEEDS: |
             src-git homeproxy https://github.com/immortalwrt/homeproxy.git
             src-git packages https://github.com/immortalwrt/packages.git
+            src-git luci https://github.com/immortalwrt/luci.git
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
