@@ -6,12 +6,21 @@ on:
     branches:
       - main
 
+# 全局环境变量，解决 Node.js 20 弃用警告
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # 此时 v4 已经支持在 Node 24 下运行
+
+      - name: Cleanup Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
 
       - name: Initialization environment
         env:
@@ -25,7 +34,6 @@ jobs:
 
       - name: Setup SDK (OpenWrt 24.10.5)
         run: |
-          # 下载 24.10.5 官方 x86_64 SDK
           wget https://downloads.openwrt.org/releases/24.10.5/targets/x86/64/openwrt-sdk-24.10.5-x86-64_gcc-13.3.0_musl.Linux-x86_64.tar.xz
           tar -xJf *.tar.xz
           mv openwrt-sdk-* sdk
@@ -39,25 +47,21 @@ jobs:
       - name: Add HomeProxy Source
         run: |
           cd sdk
-          # 克隆 HomeProxy 源码到 package 目录
           git clone https://github.com/immortalwrt/homeproxy.git package/homeproxy
-          
-          # 24.10 编译 homeproxy 必须确保依赖库存在
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          
-          # 确保 golang 版本满足编译 sing-box 的需求
+          # 24.10 编译必须确保 golang 够新
           ./scripts/feeds install -p packages golang
 
       - name: Compile HomeProxy
         run: |
           cd sdk
-          # 刷新配置并选中 homeproxy (m 代表编译为独立 ipk)
           make defconfig
+          # 修改配置为编译独立 IPK (m)
           sed -i 's/CONFIG_PACKAGE_homeproxy=y/CONFIG_PACKAGE_homeproxy=m/' .config
           
           # 下载源码并开始编译
-          # 使用 -j$(nproc) 加速，如果报错请改为 V=s 方便查看日志
+          make package/homeproxy/download V=s
           make package/homeproxy/compile -j$(nproc) V=s
 
       - name: Upload Artifacts
